@@ -15,13 +15,13 @@ cd notion
 cp .env.example .env
 ```
 
-Открыть `.env` и заполнить (данные выдаёт преподаватель):
+Открыть `.env` и заполнить:
 
 | Переменная | Что указать |
 |------------|-------------|
-| `AUTH_DATABASE_URL` | URL БД с mentors (дашборд). Пример: `postgresql://user:pass@host:5432/test` |
+| `AUTH_DATABASE_URL` | URL БД с mentors. Пример: `postgresql://user:pass@host:5432/test` (выдаёт преподаватель) |
 | `POSTGRES_PASSWORD` | Свой пароль для БД coution (придумай, минимум 1 символ) |
-| `JWT_SECRET` | Секрет из дашборда (выдаёт преподаватель) |
+| `JWT_SECRET` | Секрет для JWT. Сгенерируй сам: `openssl rand -hex 32` или Python: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
 
 Для Docker: в `AUTH_DATABASE_URL` использовать `host.docker.internal` вместо `localhost`, если mentors на твоей машине.
 
