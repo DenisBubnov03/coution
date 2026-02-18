@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createBlock, updateBlock, deleteBlock, createPage } from './api'
+import { createBlock, updateBlock, deleteBlock, createPage, fetchPage } from './api'
 
 const BLOCK_TYPES = [
   { type: 'text', label: 'Текст' },
@@ -101,13 +101,17 @@ function BlockItem({
     setContent(block.content || '')
     setLocalType(block.type)
     setProps(block.props || {})
-  }, [block.id])
+  }, [block.id, block.type, block.content, block.props])
 
   useEffect(() => {
     const unchanged = content === (block.content || '') && localType === block.type
       && JSON.stringify(props) === JSON.stringify(block.props || {})
     if (unchanged) return
-    const t = setTimeout(() => onUpdate(block.id, { content, type: localType, props }), 500)
+    // Для page-блоков не затираем page_id — сохраняем из block.props
+    const propsToSend = localType === 'page' && block.props?.page_id
+      ? { ...(block.props || {}), ...props }
+      : props
+    const t = setTimeout(() => onUpdate(block.id, { content, type: localType, props: propsToSend }), 500)
     return () => clearTimeout(t)
   }, [content, localType, props, block.id, block.content, block.type, block.props, onUpdate])
 
@@ -245,8 +249,9 @@ function BlockItem({
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute',
-              left: 44,
-              top: 0,
+              left: 0,
+              top: '100%',
+              marginTop: 4,
               background: '#252525',
               border: '1px solid #444',
               borderRadius: 8,
@@ -361,6 +366,7 @@ function BlockItem({
             : {}),
         }}
         onClick={() => setShowHandleMenu(false)}
+        onMouseEnter={() => setShowHandleMenu(false)}
       >
         {showMenu && (
           <div
@@ -450,7 +456,7 @@ function BlockItem({
           <PageBlock
             block={block}
             pageId={pageId}
-            props={props}
+            props={block.props?.page_id ? (block.props || {}) : props}
             onUpdate={onUpdate}
             navigate={navigate}
           />
@@ -570,136 +576,49 @@ function CalloutBlock({
 
 function PageBlock({ block, pageId: currentPageId, props, onUpdate, navigate }) {
   const linkedPageId = props.page_id
-  const [localTitle, setLocalTitle] = useState(block.content || '')
-  const [localEmoji, setLocalEmoji] = useState(props.emoji || '📄')
-  const [creating, setCreating] = useState(false)
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [linkedPage, setLinkedPage] = useState(null)
 
-  const title = linkedPageId ? (block.content || '') : localTitle
-  const emoji = linkedPageId ? (props.emoji || '📄') : localEmoji
+  useEffect(() => {
+    if (!linkedPageId) return
+    let cancelled = false
+    fetchPage(linkedPageId)
+      .then((p) => { if (!cancelled) setLinkedPage(p) })
+      .catch(() => { if (!cancelled) setLinkedPage(null) })
+    return () => { cancelled = true }
+  }, [linkedPageId])
 
+  const title = linkedPage?.title ?? block.content ?? 'Страница'
+  const emoji = linkedPage?.icon ?? props.emoji ?? '📄'
+
+  // Нет page_id — просто текст (страница должна быть создана при выборе типа в меню)
   if (!linkedPageId) {
     return (
-      <div
-        style={{
-          padding: '12px 14px',
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px dashed #555',
-          borderRadius: 8,
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={() => setShowEmojiPicker((v) => !v)}
-            style={{ fontSize: 24, cursor: 'pointer', position: 'relative' }}
-          >
-            {localEmoji}
-            {showEmojiPicker && (
-              <div
-                onMouseDown={(e) => e.stopPropagation()}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 28,
-                  background: '#252525',
-                  border: '1px solid #444',
-                  borderRadius: 8,
-                  padding: 8,
-                  zIndex: 1000,
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: 4,
-                }}
-              >
-                {EMOJI_PICKER.map((e) => (
-                  <button
-                    key={e}
-                    type="button"
-                    onClick={() => { setLocalEmoji(e); setShowEmojiPicker(false) }}
-                    style={{ fontSize: 20, cursor: 'pointer', background: 'none', border: 'none', padding: 4 }}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
-          </span>
-          <input
-            type="text"
-            value={localTitle}
-            onChange={(e) => setLocalTitle(e.target.value)}
-            placeholder="Название страницы"
-            style={{
-              flex: 1,
-              background: '#333',
-              border: '1px solid #444',
-              borderRadius: 6,
-              color: '#e0e0e0',
-              padding: '8px 12px',
-              fontSize: 14,
-              outline: 'none',
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          disabled={creating || !localTitle.trim()}
-          onClick={async () => {
-            setCreating(true)
-            try {
-              const p = await createPage({
-                title: localTitle.trim() || 'Без названия',
-                icon: localEmoji,
-                parent_id: currentPageId,
-              })
-              onUpdate(block.id, { props: { ...props, page_id: p.id, emoji: localEmoji }, content: localTitle.trim() || p.title })
-            } catch (e) {
-              console.error(e)
-            } finally {
-              setCreating(false)
-            }
-          }}
-          style={{
-            padding: '8px 14px',
-            background: '#333',
-            border: '1px solid #555',
-            borderRadius: 6,
-            color: '#e0e0e0',
-            cursor: creating || !localTitle.trim() ? 'not-allowed' : 'pointer',
-            fontSize: 13,
-          }}
-        >
-          {creating ? 'Создание…' : 'Создать страницу'}
-        </button>
-      </div>
+      <span style={{ padding: '8px 0', color: '#888', fontSize: 14 }} onMouseDown={(e) => e.stopPropagation()}>
+        📄 Страница
+      </span>
     )
   }
 
+  // Гиперссылка: эмодзи + название, клик — переход
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`/page/${linkedPageId}`)}
+    <a
+      href={`/page/${linkedPageId}`}
+      onClick={(e) => { e.preventDefault(); navigate(`/page/${linkedPageId}`) }}
+      onMouseDown={(e) => e.stopPropagation()}
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '10px 14px',
-        background: 'rgba(255,255,255,0.06)',
-        border: 'none',
-        borderRadius: 8,
+        gap: 8,
+        padding: '8px 0',
         color: '#4a9eff',
         cursor: 'pointer',
-        width: '100%',
-        textAlign: 'left',
         fontSize: 14,
+        textDecoration: 'none',
       }}
     >
       <span>{emoji}</span>
-      {title || 'Без названия'}
-    </button>
+      <span>{title || 'Без названия'}</span>
+    </a>
   )
 }
 
@@ -792,9 +711,11 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
   const [blocks, setBlocks] = useState(initialBlocks || [])
   const [dragState, setDragState] = useState({ draggingId: null, overId: null })
 
+  // При смене страницы или при новом списке блоков с сервера (в т.ч. после возврата) — подставляем блоки
+  const blocksKey = initialBlocks?.map((b) => `${b.id}:${(b.props?.page_id ?? '')}`).join('|') ?? ''
   useEffect(() => {
-    setBlocks(initialBlocks || [])
-  }, [pageId, initialBlocks?.length])
+    setBlocks((initialBlocks || []).map((b) => ({ ...b, props: b.props ?? {} })))
+  }, [pageId, blocksKey])
 
   const handleUpdate = useCallback(async (blockId, patch) => {
     const updated = await updateBlock(blockId, patch)
@@ -827,12 +748,9 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
 
   const handleSelectPageType = useCallback(async (block) => {
     const p = await createPage({ title: 'Страница', parent_id: pageId, icon: '📄' })
-    const updated = await updateBlock(block.id, {
-      type: 'page',
-      content: 'Страница',
-      props: { ...(block.props || {}), page_id: p.id, emoji: '📄' },
-    })
-    setBlocks((prev) => prev.map((b) => (b.id === block.id ? { ...b, ...updated } : b)))
+    const newProps = { ...(block.props || {}), page_id: p.id, emoji: '📄' }
+    await updateBlock(block.id, { type: 'page', content: 'Страница', props: newProps })
+    setBlocks((prev) => prev.map((b) => (b.id === block.id ? { ...b, type: 'page', content: 'Страница', props: newProps } : b)))
     onBlocksChange?.()
   }, [pageId, onBlocksChange])
 
@@ -877,7 +795,7 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
     return (
       <EmptyBlock
         pageId={pageId}
-        onCreated={(b) => setBlocks([b])}
+        onCreated={(newBlocks) => setBlocks(Array.isArray(newBlocks) ? newBlocks : [newBlocks])}
         onBlocksChange={onBlocksChange}
       />
     )

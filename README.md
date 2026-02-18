@@ -43,16 +43,32 @@ npm run dev
 
 ## Локально
 
+### 1. Окружение и бэкенд
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# AUTH_DATABASE_URL, COUTION_DATABASE_URL, JWT_SECRET
+# Заполни: AUTH_DATABASE_URL, COUTION_DATABASE_URL, JWT_SECRET
 
 createdb coution
 psql $COUTION_DATABASE_URL -f backend/migrations/001_initial.sql
 
 cd backend && uvicorn main:app --reload --port 8001
 ```
+
+API будет доступен на http://localhost:8001 (документация: http://localhost:8001/docs).
+
+### 2. Фронтенд
+
+В отдельном терминале:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Фронт откроется на http://localhost:5173. Запросы к API идут через прокси на бэкенд (порт 8001).

@@ -1,11 +1,13 @@
 """
 API страниц и блоков.
 """
+import json
 import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi.responses import Response
+from pydantic import BaseModel, field_serializer
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -36,6 +38,10 @@ class BlockOut(BaseModel):
     props: Optional[dict]
     position: int
 
+    @field_serializer("props")
+    def serialize_props(self, v):
+        return v if v is not None else {}
+
     class Config:
         from_attributes = True
 
@@ -65,7 +71,18 @@ def _page_to_out(p: Page, include_children: bool = False, include_blocks: bool =
     if include_children:
         out["children"] = [_page_to_out(c, include_children=True) for c in sorted(p.children, key=lambda x: x.position)]
     if include_blocks:
-        out["blocks"] = [BlockOut.model_validate(b) for b in sorted(p.blocks, key=lambda x: x.position)]
+        blocks_out = []
+        for b in sorted(p.blocks, key=lambda x: x.position):
+            raw_props = getattr(b, "props", None)
+            props_val = dict(raw_props) if raw_props else {}
+            blocks_out.append({
+                "id": int(b.id),
+                "type": str(b.type),
+                "content": b.content,
+                "props": props_val,
+                "position": int(b.position),
+            })
+        out["blocks"] = blocks_out
     return out
 
 
@@ -115,7 +132,10 @@ def get_page(
     page = db.query(Page).filter(Page.id == page_id).first()
     if not page:
         raise HTTPException(404, "Page not found")
-    return _page_to_out(page, include_children=True, include_blocks=True)
+    # children не возвращаем; blocks — всегда с props
+    out = _page_to_out(page, include_children=False, include_blocks=True)
+    body = json.dumps(out, ensure_ascii=False)
+    return Response(content=body, media_type="application/json")
 
 
 @router.patch("/pages/{page_id}")

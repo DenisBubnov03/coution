@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { fetchPage, updatePage } from './api'
 import BlockEditor from './BlockEditor'
 
@@ -8,6 +8,7 @@ const EMOJI_PICKER = ['📄', '📋', '📌', '🎯', '✅', '📝', '💡', '�
 export default function PageView() {
   const { id } = useParams()
   const [page, setPage] = useState(null)
+  const [breadcrumbs, setBreadcrumbs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
@@ -29,6 +30,25 @@ export default function PageView() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    if (!page) return
+    const buildPath = async () => {
+      const path = [{ id: page.id, title: page.title, icon: page.icon }]
+      let current = page
+      while (current?.parent_id) {
+        try {
+          const parent = await fetchPage(current.parent_id)
+          path.unshift({ id: parent.id, title: parent.title, icon: parent.icon })
+          current = parent
+        } catch {
+          break
+        }
+      }
+      setBreadcrumbs(path)
+    }
+    buildPath()
+  }, [page?.id, page?.parent_id])
 
   useEffect(() => {
     if (page) {
@@ -68,6 +88,40 @@ export default function PageView() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      {breadcrumbs.length > 0 && (
+        <nav
+          style={{
+            marginBottom: 16,
+            padding: '8px 0',
+            borderBottom: '1px solid #333',
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 4,
+            fontSize: 13,
+            color: '#888',
+          }}
+        >
+          {breadcrumbs.map((p, i) => (
+            <span key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {i > 0 && <span style={{ margin: '0 4px' }}>/</span>}
+              <Link
+                to={`/page/${p.id}`}
+                style={{
+                  color: i === breadcrumbs.length - 1 ? '#e0e0e0' : '#888',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>{p.icon || '📄'}</span>
+                <span>{(p.title || 'Без названия').slice(0, i === breadcrumbs.length - 1 ? 40 : 30)}{((p.title?.length ?? 0) > (i === breadcrumbs.length - 1 ? 40 : 30) ? '…' : '')}</span>
+              </Link>
+            </span>
+          ))}
+        </nav>
+      )}
       <header style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         {editingIcon ? (
           <div
