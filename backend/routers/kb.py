@@ -18,12 +18,14 @@ router = APIRouter(prefix="/api/kb", tags=["kb"])
 class BlockCreate(BaseModel):
     type: str
     content: Optional[str] = None
+    props: Optional[dict] = None
     position: int = 0
 
 
 class BlockUpdate(BaseModel):
     type: Optional[str] = None
     content: Optional[str] = None
+    props: Optional[dict] = None
     position: Optional[int] = None
 
 
@@ -31,6 +33,7 @@ class BlockOut(BaseModel):
     id: int
     type: str
     content: Optional[str]
+    props: Optional[dict]
     position: int
 
     class Config:
@@ -210,7 +213,10 @@ def create_block(
     page = db.query(Page).filter(Page.id == page_id).first()
     if not page:
         raise HTTPException(404, "Page not found")
-    block = Block(page_id=page_id, type=data.type, content=data.content, position=data.position)
+    block = Block(
+        page_id=page_id, type=data.type, content=data.content or None,
+        props=data.props, position=data.position
+    )
     db.add(block)
     db.commit()
     db.refresh(block)
@@ -231,6 +237,8 @@ def update_block(
         block.type = data.type
     if data.content is not None:
         block.content = data.content
+    if data.props is not None:
+        block.props = data.props
     if data.position is not None:
         block.position = data.position
     db.commit()

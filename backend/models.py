@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -54,6 +54,7 @@ class Block(Base):
     page_id = Column(Integer, ForeignKey("pages.id", ondelete="CASCADE"), nullable=False)
     type = Column(String(50), nullable=False)
     content = Column(Text, nullable=True)
+    props = Column(JSON, nullable=True)  # emoji, bg_color, text_color для callout и др.
     position = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -56,7 +56,7 @@ export async function fetchPage(id) {
   return res.json()
 }
 
-export async function createBlock(pageId, { type = 'text', content = '', position = 0 }) {
+export async function createBlock(pageId, { type = 'text', content = '', props = null, position = 0 }) {
   const token = getToken()
   if (!token) throw new Error('Не авторизован')
   const res = await fetch(`${API}/kb/pages/${pageId}/blocks`, {
@@ -65,18 +65,19 @@ export async function createBlock(pageId, { type = 'text', content = '', positio
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ type, content, position }),
+    body: JSON.stringify({ type, content, props, position }),
   })
   if (!res.ok) throw new Error('Ошибка создания блока')
   return res.json()
 }
 
-export async function updateBlock(blockId, { type, content, position }) {
+export async function updateBlock(blockId, { type, content, props, position }) {
   const token = getToken()
   if (!token) throw new Error('Не авторизован')
   const body = {}
   if (type !== undefined) body.type = type
   if (content !== undefined) body.content = content
+  if (props !== undefined) body.props = props
   if (position !== undefined) body.position = position
   const res = await fetch(`${API}/kb/blocks/${blockId}`, {
     method: 'PATCH',
@@ -113,5 +114,24 @@ export async function createPage({ title = 'Без названия', icon = nul
     body: JSON.stringify({ title, icon, parent_id: parent_id || null }),
   })
   if (!res.ok) throw new Error('Ошибка создания')
+  return res.json()
+}
+
+export async function updatePage(pageId, { title, icon, parent_id }) {
+  const token = getToken()
+  if (!token) throw new Error('Не авторизован')
+  const body = {}
+  if (title !== undefined) body.title = title
+  if (icon !== undefined) body.icon = icon
+  if (parent_id !== undefined) body.parent_id = parent_id || null
+  const res = await fetch(`${API}/kb/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error('Ошибка сохранения страницы')
   return res.json()
 }

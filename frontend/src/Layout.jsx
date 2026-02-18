@@ -1,12 +1,95 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useNavigate, NavLink } from 'react-router-dom'
+import { Outlet, useNavigate, NavLink, useParams } from 'react-router-dom'
 import { fetchPages, createPage, logout } from './api'
+
+function PageTreeItem({ page, depth = 0, onCreateSub, creatingId }) {
+  const [expanded, setExpanded] = useState(true)
+  const hasChildren = page.children?.length > 0
+  const isCreating = creatingId === page.id
+
+  return (
+    <div style={{ marginLeft: depth * 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#888',
+              cursor: 'pointer',
+              padding: 2,
+              fontSize: 10,
+            }}
+          >
+            {expanded ? '▼' : '▶'}
+          </button>
+        ) : (
+          <span style={{ width: 14 }} />
+        )}
+        <NavLink
+          to={`/page/${page.id}`}
+          style={({ isActive }) => ({
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            borderRadius: 6,
+            color: isActive ? '#fff' : '#bbb',
+            background: isActive ? '#333' : 'transparent',
+            textDecoration: 'none',
+            fontSize: 14,
+            overflow: 'hidden',
+          })}
+        >
+          <span>{page.icon || '📄'}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {page.title || 'Без названия'}
+          </span>
+        </NavLink>
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); onCreateSub(page.id) }}
+          disabled={isCreating}
+          title="Добавить подстраницу"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#666',
+            cursor: isCreating ? 'wait' : 'pointer',
+            padding: 2,
+            fontSize: 14,
+            opacity: isCreating ? 0.5 : 1,
+          }}
+        >
+          +
+        </button>
+      </div>
+      {expanded && hasChildren && (
+        <div style={{ marginBottom: 4 }}>
+          {page.children.map((c) => (
+            <PageTreeItem
+              key={c.id}
+              page={c}
+              depth={depth + 1}
+              onCreateSub={onCreateSub}
+              creatingId={creatingId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Layout({ user, onLogout }) {
   const [pages, setPages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [creatingParentId, setCreatingParentId] = useState(null)
   const navigate = useNavigate()
 
   const loadPages = () => {
@@ -24,13 +107,24 @@ export default function Layout({ user, onLogout }) {
 
   const handleNewPage = () => {
     setCreating(true)
-    createPage({ title: 'Новая страница' })
+    createPage({ title: 'Новая страница', parent_id: null })
       .then((p) => {
         loadPages()
         navigate(`/page/${p.id}`)
       })
       .catch((e) => setError(e.message))
-      .finally(() => setCreating(false))
+      .finally(() => { setCreating(false); setCreatingParentId(null) })
+  }
+
+  const handleCreateSubPage = (parentId) => {
+    setCreatingParentId(parentId)
+    createPage({ title: 'Новая страница', parent_id: parentId })
+      .then((p) => {
+        loadPages()
+        navigate(`/page/${p.id}`)
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => { setCreating(false); setCreatingParentId(null) })
   }
 
   return (
@@ -89,27 +183,13 @@ export default function Layout({ user, onLogout }) {
             <div style={{ color: '#666', fontSize: 13 }}>Загрузка...</div>
           ) : (
             pages.map((p) => (
-              <NavLink
+              <PageTreeItem
                 key={p.id}
-                to={`/page/${p.id}`}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  color: isActive ? '#fff' : '#bbb',
-                  background: isActive ? '#333' : 'transparent',
-                  textDecoration: 'none',
-                  fontSize: 14,
-                  marginBottom: 2,
-                })}
-              >
-                <span>{p.icon || '📄'}</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.title || 'Без названия'}
-                </span>
-              </NavLink>
+                page={p}
+                depth={0}
+                onCreateSub={handleCreateSubPage}
+                creatingId={creatingParentId}
+              />
             ))
           )}
         </nav>
