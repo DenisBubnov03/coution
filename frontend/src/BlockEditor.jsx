@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createBlock, updateBlock, deleteBlock, fetchPages } from './api'
+import { createBlock, updateBlock, deleteBlock, createPage } from './api'
 
 const BLOCK_TYPES = [
   { type: 'text', label: 'Текст' },
@@ -48,7 +48,6 @@ const BG_COLORS = [
 function BlockItem({
   block,
   pageId,
-  pages = [],
   onUpdate,
   onDelete,
   onAddBelow,
@@ -69,7 +68,6 @@ function BlockItem({
   const [blockFocused, setBlockFocused] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [props, setProps] = useState(block.props || {})
-  const [showPagePicker, setShowPagePicker] = useState(false)
   const inputRef = useRef(null)
   const calloutInputRef = useRef(null)
   const navigate = useNavigate()
@@ -98,13 +96,6 @@ function BlockItem({
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [showColorSubmenu])
-  useEffect(() => {
-    if (!showPagePicker) return
-    const close = () => setShowPagePicker(false)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [showPagePicker])
-
   useEffect(() => {
     setContent(block.content || '')
     setLocalType(block.type)
@@ -201,17 +192,17 @@ function BlockItem({
         className="kb-block-handle"
         style={{
           flexShrink: 0,
-          width: 40,
-          paddingTop: 6,
+          width: 44,
+          minHeight: 24,
           cursor: 'grab',
-          color: '#555',
+          color: '#888',
           position: 'relative',
           opacity: hovered ? 1 : 0,
           pointerEvents: hovered ? 'auto' : 'none',
           transition: 'opacity 0.15s',
           display: 'flex',
-          alignItems: 'flex-start',
-          gap: 2,
+          alignItems: 'center',
+          gap: 4,
         }}
       >
         <button
@@ -220,11 +211,16 @@ function BlockItem({
           style={{
             background: 'none',
             border: 'none',
-            color: '#666',
+            color: '#888',
             cursor: 'pointer',
-            padding: 2,
-            fontSize: 14,
+            padding: 0,
+            fontSize: 18,
             lineHeight: 1,
+            width: 20,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
           title="Добавить блок"
         >
@@ -236,7 +232,7 @@ function BlockItem({
           onDragEnd={onDragEnd}
           onClick={(e) => { e.stopPropagation(); setShowHandleMenu((v) => !v) }}
           onMouseDown={(e) => e.stopPropagation()}
-          style={{ userSelect: 'none', fontSize: 14, cursor: 'grab' }}
+          style={{ userSelect: 'none', fontSize: 18, lineHeight: 1, cursor: 'grab' }}
           title="Перетащить или нажми для меню"
         >
           ⋮⋮
@@ -244,6 +240,7 @@ function BlockItem({
         {showHandleMenu && (
           <div
             onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute',
               left: 44,
@@ -366,8 +363,8 @@ function BlockItem({
           <div
             className="kb-type-menu"
             onMouseDown={(e) => e.stopPropagation()}
-            style={typeMenuStyle}
             onClick={(e) => e.stopPropagation()}
+            style={typeMenuStyle}
           >
             {BLOCK_TYPES.map((t) => (
               <button
@@ -399,11 +396,8 @@ function BlockItem({
             props={props}
             setProps={setProps}
             onUpdate={(p) => onUpdate(block.id, { props: p })}
-            blockId={block.id}
             showEmojiPicker={showEmojiPicker}
             setShowEmojiPicker={setShowEmojiPicker}
-            editing={editing}
-            setEditing={setEditing}
             handleKeyDown={handleKeyDown}
             inputStyle={inputStyle}
             inputRef={calloutInputRef}
@@ -447,10 +441,8 @@ function BlockItem({
         ) : isPageBlock ? (
           <PageBlock
             block={block}
+            pageId={pageId}
             props={props}
-            pages={pages}
-            showPagePicker={showPagePicker}
-            setShowPagePicker={setShowPagePicker}
             onUpdate={onUpdate}
             navigate={navigate}
           />
@@ -484,31 +476,13 @@ function BlockItem({
 }
 
 function CalloutBlock({
-  content, setContent, props, setProps, onUpdate, blockId,
-  showEmojiPicker, setShowEmojiPicker, editing, setEditing,
+  content, setContent, props, setProps, onUpdate,
+  showEmojiPicker, setShowEmojiPicker,
   handleKeyDown, inputStyle, inputRef,
 }) {
   const bg = props.bg_color || '#1e3a2f'
   const textC = props.text_color || '#ffffff'
   const emoji = props.emoji || '🎯'
-  const lines = (content || '').split('\n')
-  const header = lines[0] || ''
-  const bodyLines = lines.slice(1)
-  const parseLine = (line) => {
-    const t = line.trim()
-    if (t.startsWith('[x] ')) return { type: 'todo', checked: true, text: t.slice(4) }
-    if (t.startsWith('[ ] ')) return { type: 'todo', checked: false, text: t.slice(4) }
-    if (/^\d+\.\s/.test(t)) return { type: 'numbered', text: t.replace(/^\d+\.\s/, '') }
-    if (t.startsWith('- ')) return { type: 'bullet', text: t.slice(2) }
-    return { type: 'text', text: t }
-  }
-
-  useEffect(() => {
-    if (editing && inputRef?.current) {
-      inputRef.current.focus()
-    }
-  }, [editing, inputRef])
-
   return (
     <div
       style={{
@@ -521,6 +495,7 @@ function CalloutBlock({
         gap: 12,
         alignItems: 'flex-start',
       }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <span
         role="button"
@@ -566,130 +541,131 @@ function CalloutBlock({
         </div>
         )}
       </span>
-      <div style={{ flex: 1, minWidth: 0 }} onClick={() => setEditing(true)}>
-        {editing ? (
-          <textarea
-            ref={inputRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setEditing(true)}
-            onBlur={() => setEditing(false)}
-            placeholder="Цель: ... (Enter — новая строка. - пункт, 1. пункт, [ ] задача)"
-            rows={Math.max(2, Math.min(15, (content || '').split('\n').length))}
-            style={{
-              ...inputStyle,
-              color: textC,
-              background: 'transparent',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <div
-            onClick={() => setEditing(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setEditing(true)}
-            style={{ cursor: 'text' }}
-          >
-            {header && <div style={{ fontWeight: 600, marginBottom: 8 }}>{header}</div>}
-            {bodyLines.length > 0 && (
-              <ul style={{ margin: 0, paddingLeft: 20 }}>
-                {bodyLines.map((line, i) => {
-                  const parsed = parseLine(line)
-                  if (parsed.type === 'todo') {
-                    return (
-                      <li key={i} style={{ listStyle: 'none', marginLeft: -20, marginBottom: 4 }}>
-                        <span>{parsed.checked ? '☑' : '☐'} </span>
-                        <span style={{ textDecoration: parsed.checked ? 'line-through' : 'none' }}>{parsed.text}</span>
-                      </li>
-                    )
-                  }
-                  if (parsed.type === 'bullet' || parsed.type === 'numbered') {
-                    return <li key={i} style={{ marginBottom: 4 }}>{parsed.text}</li>
-                  }
-                  return <li key={i} style={{ listStyle: 'none', marginBottom: 4 }}>{parsed.text}</li>
-                })}
-              </ul>
-            )}
-          </div>
-        )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <textarea
+          ref={inputRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Цель: ... (Enter — новая строка. - пункт, 1. пункт, [ ] задача)"
+          rows={Math.max(2, Math.min(15, (content || '').split('\n').length))}
+          style={{
+            ...inputStyle,
+            color: textC,
+            background: 'transparent',
+          }}
+        />
       </div>
     </div>
   )
 }
 
-function PageBlock({ block, props, pages, showPagePicker, setShowPagePicker, onUpdate, navigate }) {
-  const pageId = props.page_id
-  const page = pages.find((p) => p.id === pageId)
-  const title = page?.title || block.content || 'Выберите страницу'
+function PageBlock({ block, pageId: currentPageId, props, onUpdate, navigate }) {
+  const linkedPageId = props.page_id
+  const [localTitle, setLocalTitle] = useState(block.content || '')
+  const [localEmoji, setLocalEmoji] = useState(props.emoji || '📄')
+  const [creating, setCreating] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  if (!pageId) {
+  const title = linkedPageId ? (block.content || '') : localTitle
+  const emoji = linkedPageId ? (props.emoji || '📄') : localEmoji
+
+  if (!linkedPageId) {
     return (
-      <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          padding: '12px 14px',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px dashed #555',
+          borderRadius: 8,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowEmojiPicker((v) => !v)}
+            style={{ fontSize: 24, cursor: 'pointer', position: 'relative' }}
+          >
+            {localEmoji}
+            {showEmojiPicker && (
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 28,
+                  background: '#252525',
+                  border: '1px solid #444',
+                  borderRadius: 8,
+                  padding: 8,
+                  zIndex: 1000,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: 4,
+                }}
+              >
+                {EMOJI_PICKER.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => { setLocalEmoji(e); setShowEmojiPicker(false) }}
+                    style={{ fontSize: 20, cursor: 'pointer', background: 'none', border: 'none', padding: 4 }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
+          <input
+            type="text"
+            value={localTitle}
+            onChange={(e) => setLocalTitle(e.target.value)}
+            placeholder="Название страницы"
+            style={{
+              flex: 1,
+              background: '#333',
+              border: '1px solid #444',
+              borderRadius: 6,
+              color: '#e0e0e0',
+              padding: '8px 12px',
+              fontSize: 14,
+              outline: 'none',
+            }}
+          />
+        </div>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setShowPagePicker(true) }}
+          disabled={creating || !localTitle.trim()}
+          onClick={async () => {
+            setCreating(true)
+            try {
+              const p = await createPage({
+                title: localTitle.trim() || 'Без названия',
+                icon: localEmoji,
+                parent_id: currentPageId,
+              })
+              onUpdate(block.id, { props: { ...props, page_id: p.id, emoji: localEmoji }, content: localTitle.trim() || p.title })
+            } catch (e) {
+              console.error(e)
+            } finally {
+              setCreating(false)
+            }
+          }}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '10px 14px',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px dashed #555',
-            borderRadius: 8,
-            color: '#aaa',
-            cursor: 'pointer',
-            width: '100%',
-            textAlign: 'left',
-            fontSize: 14,
+            padding: '8px 14px',
+            background: '#333',
+            border: '1px solid #555',
+            borderRadius: 6,
+            color: '#e0e0e0',
+            cursor: creating || !localTitle.trim() ? 'not-allowed' : 'pointer',
+            fontSize: 13,
           }}
         >
-          <span>📄</span>
-          {title}
+          {creating ? 'Создание…' : 'Создать страницу'}
         </button>
-        {showPagePicker && (
-          <div
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 44,
-              background: '#252525',
-              border: '1px solid #444',
-              borderRadius: 8,
-              padding: 8,
-              zIndex: 1000,
-              maxHeight: 300,
-              overflow: 'auto',
-              minWidth: 220,
-            }}
-          >
-            {pages.length === 0 ? (
-              <div style={{ color: '#888', padding: 8 }}>Нет страниц</div>
-            ) : (
-              pages.filter((p) => p.id !== block.page_id).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => {
-                    onUpdate(block.id, { props: { ...props, page_id: p.id }, content: p.title || '' })
-                    setShowPagePicker(false)
-                  }}
-                  style={{
-                    ...btnStyle,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <span>{p.icon || '📄'}</span>
-                  {p.title || 'Без названия'}
-                </button>
-              ))
-            )}
-          </div>
-        )}
       </div>
     )
   }
@@ -697,7 +673,7 @@ function PageBlock({ block, props, pages, showPagePicker, setShowPagePicker, onU
   return (
     <button
       type="button"
-      onClick={() => navigate(`/page/${pageId}`)}
+      onClick={() => navigate(`/page/${linkedPageId}`)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -713,8 +689,8 @@ function PageBlock({ block, props, pages, showPagePicker, setShowPagePicker, onU
         fontSize: 14,
       }}
     >
-      <span>{page?.icon || '📄'}</span>
-      {title}
+      <span>{emoji}</span>
+      {title || 'Без названия'}
     </button>
   )
 }
@@ -723,20 +699,25 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
   const collapsed = props.collapsed !== false
   const lines = (content || '').split('\n')
   const summary = lines[0] || ''
-  const bodyLines = lines.slice(1)
+
+  const lineHeight = 22
+  const chevronStyle = {
+    color: '#888',
+    fontSize: 14,
+    width: 20,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    paddingTop: collapsed ? 0 : 6,
+    minHeight: lineHeight,
+    cursor: 'pointer',
+  }
 
   return (
     <div style={{ margin: '4px 0' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 8,
-          cursor: 'pointer',
-        }}
-      >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <span
-          style={{ color: '#888', fontSize: 12, marginTop: 6, flexShrink: 0 }}
+          style={chevronStyle}
           onClick={() => {
             const p = { ...props, collapsed: !collapsed }
             setProps(p)
@@ -747,7 +728,7 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
         </span>
         {collapsed ? (
           <span
-            style={{ ...inputStyle, flex: 1 }}
+            style={{ ...inputStyle, flex: 1, lineHeight: `${lineHeight}px`, cursor: 'pointer' }}
             onClick={() => {
               const p = { ...props, collapsed: false }
               setProps(p)
@@ -757,12 +738,12 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
             {summary || 'Содержимое'}
           </span>
         ) : (
-          <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Заголовок (первая строка), затем содержимое"
+              placeholder="Заголовок (первая строка), затем содержимое. / — меню типа блока."
               rows={Math.max(2, Math.min(20, (content || '').split('\n').length))}
               style={{ ...inputStyle, width: '100%' }}
             />
@@ -796,22 +777,13 @@ const typeMenuStyle = {
   boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
 }
 
-function flattenPages(pages, level = 0) {
-  return pages.flatMap((p) => [{ ...p, _level: level }, ...flattenPages(p.children || [], level + 1)])
-}
-
 export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksChange }) {
   const [blocks, setBlocks] = useState(initialBlocks || [])
   const [dragState, setDragState] = useState({ draggingId: null, overId: null })
-  const [pages, setPages] = useState([])
 
   useEffect(() => {
     setBlocks(initialBlocks || [])
   }, [pageId, initialBlocks?.length])
-
-  useEffect(() => {
-    fetchPages().then(setPages).catch(() => setPages([]))
-  }, [])
 
   const handleUpdate = useCallback(async (blockId, patch) => {
     const updated = await updateBlock(blockId, patch)
@@ -898,7 +870,6 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
           key={block.id}
           block={block}
           pageId={pageId}
-          pages={flattenPages(pages)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
           onAddBelow={handleAddBelow}
