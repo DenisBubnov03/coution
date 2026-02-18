@@ -8,7 +8,7 @@
 ## Быстрый старт
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # обязательно! Без .env будет RuntimeError
 # Заполни: AUTH_DATABASE_URL, POSTGRES_PASSWORD, JWT_SECRET
 
 docker compose up -d

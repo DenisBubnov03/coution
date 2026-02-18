@@ -11,6 +11,8 @@ cd notion
 
 ## 2. Создать .env
 
+**Обязательный шаг.** Без `.env` приложение выдаст `RuntimeError: AUTH_DATABASE_URL и COUTION_DATABASE_URL обязательны`.
+
 ```bash
 cp .env.example .env
 ```
@@ -59,6 +61,6 @@ cd backend && uvicorn main:app --reload --port 8001
 
 ## Если что-то не работает
 
-- `AUTH_DATABASE_URL и COUTION_DATABASE_URL обязательны` — проверь, что все переменные заполнены в `.env`
+- `AUTH_DATABASE_URL и COUTION_DATABASE_URL обязательны` — создай `.env` из шаблона: `cp .env.example .env`, затем заполни все переменные
 - `Connection refused` — Postgres не запущен или неверный хост/порт
 - Подробнее: [DOCS.md](DOCS.md)
