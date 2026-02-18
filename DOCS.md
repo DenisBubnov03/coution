@@ -6,7 +6,7 @@
 
 - **Auth** — менторы из БД дашборда (`test`). Логин: tg-ник + пароль.
 - **Данные** — страницы и блоки в БД `coution`.
-- **Два Postgres**: дашборд (test) — отдельно; coution — в Docker или свой сервер.
+- **Postgres не в Docker** — обе БД (test и coution) снаружи: локально или на другой VM.
 
 ## Безопасность
 
@@ -19,14 +19,18 @@
 ### Быстрый старт
 
 ```bash
-# 1. .env
-cp .env.example .env
-# Заполнить: AUTH_DATABASE_URL, POSTGRES_PASSWORD, JWT_SECRET
+# 1. БД coution на твоём Postgres
+createdb coution
+psql $COUTION_DATABASE_URL -f backend/migrations/001_initial.sql
 
-# 2. Запуск
+# 2. .env
+cp .env.example .env
+# AUTH_DATABASE_URL, COUTION_DATABASE_URL, JWT_SECRET
+
+# 3. Запуск (только app + frontend)
 docker compose up -d
 
-# API
+open http://localhost:5173
 open http://localhost:8001/docs
 ```
 
@@ -35,11 +39,11 @@ open http://localhost:8001/docs
 | Переменная | Обязательна | Описание |
 |------------|-------------|----------|
 | `AUTH_DATABASE_URL` | да | postgresql://user:pass@host/test — БД с mentors |
-| `POSTGRES_PASSWORD` | да | Пароль Postgres в контейнере coution |
+| `COUTION_DATABASE_URL` | да | postgresql://user:pass@host/coution — БД для страниц |
 | `JWT_SECRET` | да | Секрет для JWT (32+ символов) |
-| `POSTGRES_USER` | нет | Логин Postgres (по умолчанию coution) |
-| `POSTGRES_DB` | нет | Имя БД (по умолчанию coution) |
 | `CORS_ORIGINS` | нет | Разрешённые origins через запятую |
+
+При запуске в Docker с БД на хосте используй `host.docker.internal` вместо `localhost`. На VM укажи хост/IP сервера с Postgres.
 
 ### Подключение к mentors (дашборд)
 
@@ -62,22 +66,10 @@ AUTH_DATABASE_URL=postgresql://user:pass@dashboard_postgres:5432/test
 ```
 И добавить `dashboard_postgres` в сеть compose или указать внешнюю сеть.
 
-### Создание БД и таблиц
-
-- БД `coution` создаётся Postgres при первом запуске.
-- Таблицы `pages`, `blocks` создаются скриптом `001_initial.sql` в `docker-entrypoint-initdb.d/`.
-- Повторный `up` не пересоздаёт БД — данные сохраняются в volume `postgres_data`.
-
-### Volumes
-
-- `postgres_data` — данные Postgres. Удаление volume удалит все данные coution.
-
 ### Остановка
 
 ```bash
 docker compose down
-# С данными:
-# docker compose down -v
 ```
 
 ## Локальный запуск (без Docker)

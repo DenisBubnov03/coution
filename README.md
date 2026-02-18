@@ -7,14 +7,32 @@
 
 ## Быстрый старт
 
+БД не в Docker — подключаемся к твоему Postgres (локально или на другой VM).
+
 ```bash
-cp .env.example .env   # обязательно! Без .env будет RuntimeError
-# Заполни: AUTH_DATABASE_URL, POSTGRES_PASSWORD, JWT_SECRET
+cp .env.example .env
+# Заполни: AUTH_DATABASE_URL, COUTION_DATABASE_URL, JWT_SECRET
 
 docker compose up -d
 ```
 
-API: http://localhost:8001/docs
+Поднимутся только app + frontend.
+
+- **Фронт:** http://localhost:5173
+- **API:** http://localhost:8001/docs
+
+Убедись, что БД coution создана и таблицы применены: `psql $COUTION_DATABASE_URL -f backend/migrations/001_initial.sql`
+
+## Фронт отдельно (без Docker)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Откроется http://localhost:5173 — логин, список страниц, просмотр страницы.  
+Бэкенд должен быть запущен на порту 8001 (прокси в vite настроен на /api).
 
 ## Документация
 
