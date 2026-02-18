@@ -35,20 +35,55 @@ cp .env.example .env
 docker compose up -d
 ```
 
-БД coution и таблицы создаются автоматически.
+**БД и таблицы создаются автоматически** — ничего дополнительно делать не нужно.
+
+---
 
 ### Локально (без Docker)
+
+Если не используешь Docker, нужно вручную создать базу и таблицы.
+
+#### 3.1. Установить PostgreSQL
+
+- Mac: `brew install postgresql` и `brew services start postgresql`
+- Windows: скачать с https://www.postgresql.org/download/
+- Linux: `sudo apt install postgresql` или `sudo yum install postgresql`
+
+#### 3.2. Создать базу данных coution
+
+Открой терминал и выполни:
+
+```bash
+createdb coution
+```
+
+Если команда не найдена — добавь Postgres в PATH или используй полный путь.  
+Проверить, что база создалась: `psql -l` (в списке должна быть coution).
+
+#### 3.3. Создать таблицы
+
+Выполни миграцию (подставь свои user и password из COUTION_DATABASE_URL):
+
+```bash
+psql postgresql://твой_user:твой_password@localhost/coution -f backend/migrations/001_initial.sql
+```
+
+Или через переменную из .env:
+
+```bash
+source .env   # загрузить переменные (Mac/Linux)
+psql "$COUTION_DATABASE_URL" -f backend/migrations/001_initial.sql
+```
+
+Должно вывести `CREATE TABLE` — значит таблицы созданы.
+
+#### 3.4. Запустить приложение
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Создать БД и таблицы
-createdb coution
-psql $COUTION_DATABASE_URL -f backend/migrations/001_initial.sql
-
-# Запуск
 cd backend && uvicorn main:app --reload --port 8001
 ```
 
@@ -61,6 +96,8 @@ cd backend && uvicorn main:app --reload --port 8001
 
 ## Если что-то не работает
 
-- `AUTH_DATABASE_URL и COUTION_DATABASE_URL обязательны` — создай `.env` из шаблона: `cp .env.example .env`, затем заполни все переменные
+- `AUTH_DATABASE_URL и COUTION_DATABASE_URL обязательны` — создай `.env`: `cp .env.example .env`, заполни переменные
 - `Connection refused` — Postgres не запущен или неверный хост/порт
+- `relation "pages" does not exist` — **таблицы не созданы**. Выполни `psql $COUTION_DATABASE_URL -f backend/migrations/001_initial.sql`
+- `database "coution" does not exist` — **база не создана**. Выполни `createdb coution`
 - Подробнее: [DOCS.md](DOCS.md)
