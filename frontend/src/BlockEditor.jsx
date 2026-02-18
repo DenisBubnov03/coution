@@ -53,6 +53,7 @@ function BlockItem({
   onAddBelow,
   onDuplicate,
   onReorder,
+  onSelectPageType,
   dragState,
   onDragStart,
   onDragOver,
@@ -159,6 +160,7 @@ function BlockItem({
     inputStyle.borderLeft = '4px solid #444'
     inputStyle.paddingLeft = 16
   }
+  if (props.text_color) inputStyle.color = props.text_color
 
   const ListTag = localType === 'numbered_list' ? 'ol' : 'ul'
   const listStyle = {
@@ -197,8 +199,8 @@ function BlockItem({
           cursor: 'grab',
           color: '#888',
           position: 'relative',
-          opacity: hovered ? 1 : 0,
-          pointerEvents: hovered ? 'auto' : 'none',
+          opacity: hovered || showHandleMenu ? 1 : 0,
+          pointerEvents: hovered || showHandleMenu ? 'auto' : 'none',
           transition: 'opacity 0.15s',
           display: 'flex',
           alignItems: 'center',
@@ -257,13 +259,14 @@ function BlockItem({
           >
             <div>
               <button type="button" onClick={() => { setShowHandleMenu(false); setShowMenu(true) }} style={btnStyle}>Сменить тип</button>
-              <button type="button" onClick={() => { setShowHandleMenu(false); setShowColorSubmenu((v) => !v) }} style={btnStyle}>Цвет →</button>
+              <button type="button" onClick={() => setShowColorSubmenu((v) => !v)} style={btnStyle}>Цвет →</button>
               <button type="button" onClick={() => { setShowHandleMenu(false); onDuplicate(block) }} style={btnStyle}>Дублировать</button>
               <button type="button" onClick={() => { setShowHandleMenu(false); onDelete(block.id) }} style={{ ...btnStyle, color: '#e57373' }}>Удалить</button>
             </div>
             {showColorSubmenu && (
               <div
                 onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   marginLeft: 4,
                   paddingLeft: 8,
@@ -370,10 +373,15 @@ function BlockItem({
               <button
                 key={t.type}
                 type="button"
-                onClick={() => {
-                  setLocalType(t.type)
+                onClick={async () => {
                   setShowMenu(false)
-                  onUpdate(block.id, { type: t.type })
+                  if (t.type === 'page' && onSelectPageType) {
+                    await onSelectPageType(block)
+                    setLocalType('page')
+                  } else {
+                    setLocalType(t.type)
+                    onUpdate(block.id, { type: t.type })
+                  }
                 }}
                 style={{
                   ...btnStyle,
@@ -768,6 +776,9 @@ const btnStyle = {
 }
 const typeMenuStyle = {
   position: 'fixed',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
   background: '#252525',
   border: '1px solid #444',
   borderRadius: 8,
@@ -811,6 +822,17 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
       position: block.position + 1,
     })
     setBlocks((prev) => [...prev, newBlock].sort((a, b) => a.position - b.position))
+    onBlocksChange?.()
+  }, [pageId, onBlocksChange])
+
+  const handleSelectPageType = useCallback(async (block) => {
+    const p = await createPage({ title: 'Страница', parent_id: pageId, icon: '📄' })
+    const updated = await updateBlock(block.id, {
+      type: 'page',
+      content: 'Страница',
+      props: { ...(block.props || {}), page_id: p.id, emoji: '📄' },
+    })
+    setBlocks((prev) => prev.map((b) => (b.id === block.id ? { ...b, ...updated } : b)))
     onBlocksChange?.()
   }, [pageId, onBlocksChange])
 
@@ -875,6 +897,7 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
           onAddBelow={handleAddBelow}
           onDuplicate={handleDuplicate}
           onReorder={handleDrop}
+          onSelectPageType={handleSelectPageType}
           dragState={dragState}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
