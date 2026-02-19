@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, field_serializer, model_validator
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -29,6 +29,14 @@ class BlockUpdate(BaseModel):
     content: Optional[str] = None
     props: Optional[dict] = None
     position: Optional[int] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_props_dict(cls, data):
+        if isinstance(data, dict) and "props" in data and data["props"] is not None:
+            if not isinstance(data["props"], dict):
+                data = {**data, "props": {}}
+        return data
 
 
 class BlockOut(BaseModel):

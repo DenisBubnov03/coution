@@ -71,13 +71,19 @@ export async function createBlock(pageId, { type = 'text', content = '', props =
   return res.json()
 }
 
+function ensurePropsObject(props) {
+  if (props === undefined || props === null) return undefined
+  if (typeof props === 'object' && !Array.isArray(props)) return props
+  return {}
+}
+
 export async function updateBlock(blockId, { type, content, props, position }) {
   const token = getToken()
   if (!token) throw new Error('Не авторизован')
   const body = {}
   if (type !== undefined) body.type = type
   if (content !== undefined) body.content = content
-  if (props !== undefined) body.props = props
+  if (props !== undefined) body.props = ensurePropsObject(props)
   if (position !== undefined) body.position = position
   const res = await fetch(`${API}/kb/blocks/${blockId}`, {
     method: 'PATCH',

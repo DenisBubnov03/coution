@@ -70,7 +70,8 @@ function BlockItem({
   const [editing, setEditing] = useState(false)
   const [blockFocused, setBlockFocused] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const [props, setProps] = useState(block.props || {})
+  const normProps = (p) => (p != null && typeof p === 'object' && !Array.isArray(p) ? p : {})
+  const [props, setProps] = useState(() => normProps(block.props))
   const inputRef = useRef(null)
   const calloutInputRef = useRef(null)
   const navigate = useNavigate()
@@ -102,7 +103,7 @@ function BlockItem({
   useEffect(() => {
     setContent(block.content || '')
     setLocalType(block.type)
-    setProps(block.props || {})
+    setProps(normProps(block.props))
   }, [block.id, block.type, block.content, block.props])
 
   useEffect(() => {
@@ -131,6 +132,7 @@ function BlockItem({
       return
     }
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (localType === 'callout' || localType === 'code' || localType === 'quote') return
       e.preventDefault()
       onAddBelow(block.position + 1, { openTypeMenu: false })
       return
@@ -274,7 +276,7 @@ function BlockItem({
           >
             <div>
               <button type="button" onClick={() => { setShowHandleMenu(false); setShowMenu(true) }} style={btnStyle}>Сменить тип</button>
-              <button type="button" onClick={() => setShowColorSubmenu((v) => !v)} style={btnStyle}>Цвет →</button>
+              <button type="button" onClick={() => setShowColorSubmenu((v) => !v)} style={btnStyle}>Цвет</button>
               <button type="button" onClick={() => { setShowHandleMenu(false); onDuplicate(block) }} style={btnStyle}>Дублировать</button>
               <button type="button" onClick={() => { setShowHandleMenu(false); onDelete(block.id) }} style={{ ...btnStyle, color: '#e57373' }}>Удалить</button>
             </div>
@@ -435,7 +437,7 @@ function BlockItem({
                 const text = content.replace(/^\[[ x]\]\s*/, '')
                 setContent(e.target.checked ? '[x] ' + text : '[ ] ' + text)
               }}
-              style={{ marginTop: 10 }}
+              style={{ marginTop: 16 }}
             />
             <textarea
               ref={inputRef}
@@ -500,6 +502,12 @@ function BlockItem({
   )
 }
 
+const CALLOUT_FORM = {
+  borderRadius: 8,
+  borderLeft: undefined,
+  border: undefined,
+}
+
 function CalloutBlock({
   content, setContent, props, setProps, onUpdate,
   showEmojiPicker, setShowEmojiPicker,
@@ -508,13 +516,20 @@ function CalloutBlock({
   const bg = props.bg_color || '#1e3a2f'
   const textC = props.text_color || '#ffffff'
   const emoji = props.emoji || '🎯'
+  const form = {
+    borderRadius: props.border_radius ?? CALLOUT_FORM.borderRadius,
+    ...(props.border_left != null && { borderLeft: props.border_left }),
+    ...(CALLOUT_FORM.border != null && { border: CALLOUT_FORM.border }),
+  }
   return (
     <div
       style={{
         background: bg,
         color: textC,
-        borderRadius: 8,
-        padding: '12px 16px',
+        borderRadius: form.borderRadius,
+        ...(form.borderLeft != null && { borderLeft: form.borderLeft }),
+        ...(form.border != null && { border: form.border }),
+        padding: '8px 16px',
         margin: '4px 0',
         display: 'flex',
         gap: 12,
@@ -527,7 +542,7 @@ function CalloutBlock({
         tabIndex={0}
         onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(true) }}
         onKeyDown={(e) => e.key === 'Enter' && setShowEmojiPicker(true)}
-        style={{ fontSize: 24, cursor: 'pointer', flexShrink: 0, position: 'relative' }}
+        style={{ fontSize: 16.8, cursor: 'pointer', flexShrink: 0,paddingTop: '10px', position: 'relative' }}
       >
         {emoji}
         {showEmojiPicker && (
@@ -572,11 +587,13 @@ function CalloutBlock({
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Цель: ... (Enter — новая строка. - пункт, 1. пункт, [ ] задача)"
+          
+//           placeholder="Цель: ... (Enter — новая строка. - пункт, 1. пункт, [ ] задача)"
           rows={Math.max(2, Math.min(15, (content || '').split('\n').length))}
           style={{
             ...inputStyle,
             color: textC,
+            paddingTop: '8px',
             background: 'transparent',
           }}
         />
@@ -655,6 +672,8 @@ function NestedBlockItem({
   const [localType, setLocalType] = useState(child.type || 'text')
   const [hovered, setHovered] = useState(false)
   const [showHandleMenu, setShowHandleMenu] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const calloutInputRef = useRef(null)
 
   useEffect(() => {
     setContent(child.content || '')
@@ -674,6 +693,7 @@ function NestedBlockItem({
   const onKeyDown = (e) => {
     if (e.key === '/') return
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (localType === 'callout' || localType === 'code' || localType === 'quote') return
       e.preventDefault()
       onAddBelow(child.position + 1)
       return
@@ -708,6 +728,8 @@ function NestedBlockItem({
   const isDragging = dragState?.draggingId === child.id
   const isOver = dragState?.overId === child.id
 
+  const HANDLE_OFFSET_UNDER_CHEVRON = 52 - 78
+
   return (
     <div
       style={{
@@ -716,6 +738,7 @@ function NestedBlockItem({
         gap: 4,
         marginBottom: 4,
         minHeight: 32,
+        marginLeft: HANDLE_OFFSET_UNDER_CHEVRON,
         opacity: isDragging ? 0.5 : 1,
         outline: isOver ? '2px solid #4a9eff' : 'none',
         borderRadius: 4,
@@ -814,7 +837,69 @@ function NestedBlockItem({
         )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }} onMouseEnter={() => setShowHandleMenu(false)}>
-        {localType === 'heading1' || localType === 'heading2' || localType === 'heading3' ? (
+        {localType === 'callout' ? (
+          <div style={{ width: '100%', minWidth: 200 }}>
+            <CalloutBlock
+              content={content}
+              setContent={setContent}
+              props={child.props || {}}
+              setProps={(p) => persist({ props: p })}
+              onUpdate={(p) => persist({ props: p })}
+              showEmojiPicker={showEmojiPicker}
+              setShowEmojiPicker={setShowEmojiPicker}
+              handleKeyDown={onKeyDown}
+              inputStyle={baseInputStyle}
+              inputRef={calloutInputRef}
+            />
+          </div>
+        ) : localType === 'to_do' ? (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', margin: '4px 0' }}>
+            <input
+              type="checkbox"
+              checked={content.startsWith('[x]')}
+              onChange={(e) => {
+                const text = content.replace(/^\[[ x]\]\s*/, '')
+                setContent(e.target.checked ? '[x] ' + text : '[ ] ' + text)
+              }}
+              style={{ marginTop: 12 }}
+            />
+            <textarea
+              value={content.replace(/^\[[ x]\]\s*/, '')}
+              onChange={(e) => setContent((content.startsWith('[x]') ? '[x] ' : '[ ] ') + e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Задача"
+              rows={Math.max(1, Math.min(10, (content.replace(/^\[[ x]\]\s*/, '').split('\n').length)))}
+              style={{ ...baseInputStyle, flex: 1,paddingTop: '4px', }}
+            />
+          </label>
+        ) : localType === 'code' ? (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Код"
+            rows={Math.max(5, (content || '').split('\n').length)}
+            style={{ ...baseInputStyle, fontFamily: 'monospace' }}
+          />
+        ) : localType === 'quote' ? (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Цитата"
+            rows={Math.max(1, Math.min(15, (content || '').split('\n').length))}
+            style={{ ...baseInputStyle, borderLeft: '4px solid #444', paddingLeft: 16 }}
+          />
+        ) : localType === 'bulleted_list' || localType === 'numbered_list' ? (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={localType === 'numbered_list' ? '1. пункт' : '• пункт'}
+            rows={Math.max(1, Math.min(15, (content || '').split('\n').length))}
+            style={{ ...baseInputStyle, margin: '6px 0', paddingLeft: 24 }}
+          />
+        ) : localType === 'heading1' || localType === 'heading2' || localType === 'heading3' ? (
           <input
             type="text"
             value={content}
@@ -839,31 +924,32 @@ function NestedBlockItem({
 }
 
 function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, handleKeyDown, inputStyle, pageId }) {
-  const collapsed = props.collapsed !== false
+  const safeProps = (props != null && typeof props === 'object' && !Array.isArray(props)) ? props : {}
+  const collapsed = safeProps.collapsed !== false
   const lines = (content || '').split('\n')
   const summaryRaw = lines[0] || ''
   const summary = summaryRaw.trim()
   const hasTitle = summary.length > 0
   const bodyLines = lines.slice(1)
-  const children = (props.children || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  const children = (safeProps.children || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
   const hasMigratedRef = useRef(false)
   useEffect(() => {
     if (hasMigratedRef.current || children.length > 0 || bodyLines.length === 0) return
     hasMigratedRef.current = true
     const migrated = [{ id: 'n-' + Date.now(), type: 'text', content: bodyLines.join('\n'), position: 0, props: {} }]
-    const newProps = { ...props, children: migrated }
+    const newProps = { ...safeProps, children: migrated }
     setProps(newProps)
-    onUpdate(blockId, { props: newProps })
-  }, [children.length, bodyLines.length, props, setProps, onUpdate, blockId])
+    // Сохранение уйдёт через debounce в BlockItem
+  }, [children.length, bodyLines.length, setProps, blockId])
 
   const [nestedDragState, setNestedDragState] = useState({ draggingId: null, overId: null })
 
   const setChildren = useCallback((newChildren) => {
     const withPosition = newChildren.map((c, i) => ({ ...c, position: i }))
-    const newProps = { ...props, children: withPosition }
+    const newProps = { ...safeProps, children: withPosition }
     setProps(newProps)
-    onUpdate(blockId, { props: newProps })
-  }, [props, setProps, onUpdate, blockId])
+    // Сохранение уйдёт одним запросом через debounce в BlockItem
+  }, [safeProps, setProps, blockId])
 
   const updateChild = useCallback((childId, data) => {
     const newChildren = children.map((c) => (c.id === childId ? { ...c, ...data } : c))
@@ -940,29 +1026,31 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transform: 'translateY(2px)',
     height: TOGGLE_LINE_HEIGHT,
     cursor: 'pointer',
   }
 
   return (
     <div style={{ width: '100%', minWidth: 0 }}>
-      {/* Первая строка: ▼ и заголовок */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: TOGGLE_GAP,
-          height: TOGGLE_LINE_HEIGHT,
-          minHeight: TOGGLE_LINE_HEIGHT,
-        }}
-      >
-        <span
-          style={chevronStyle}
+      {/* Первая строка: ▼ и заголовок. Обёртка с paddingTop выравнивает с хендлом; внутренняя строка — центрирование ▼ и текста. */}
+      <div style={{ paddingTop: 7 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: TOGGLE_GAP,
+            height: TOGGLE_LINE_HEIGHT,
+            minHeight: TOGGLE_LINE_HEIGHT,
+          }}
+        >
+          <span
+            style={chevronStyle}
           onClick={(e) => {
             e.stopPropagation()
-            const p = { ...props, collapsed: !collapsed }
+            const p = { ...safeProps, collapsed: !collapsed }
             setProps(p)
-            onUpdate(blockId, p)
+            // Сохранение уйдёт одним запросом через debounce в BlockItem
           }}
           onMouseDown={(e) => e.stopPropagation()}
           title={collapsed ? 'Развернуть' : 'Свернуть'}
@@ -985,6 +1073,7 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
             minWidth: 0,
             height: TOGGLE_LINE_HEIGHT,
             lineHeight: `${TOGGLE_LINE_HEIGHT}px`,
+            transform: 'translateY(2px)',
             padding: '0 4px',
             margin: 0,
             border: 'none',
@@ -997,6 +1086,7 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
             verticalAlign: 'middle',
           }}
         />
+        </div>
       </div>
 
       {/* Развёрнутое содержимое: вложенные блоки (хендл на уровне ▼). При развороте создаётся одна строка. */}
@@ -1056,11 +1146,17 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
   const [dragState, setDragState] = useState({ draggingId: null, overId: null })
   const [openTypeMenuBlockId, setOpenTypeMenuBlockId] = useState(null)
 
+  const normalizeBlockProps = useCallback((b) => {
+    const p = b.props
+    const safeProps = (p != null && typeof p === 'object' && !Array.isArray(p)) ? p : {}
+    return { ...b, props: safeProps }
+  }, [])
+
   // При смене страницы или при новом списке блоков с сервера (в т.ч. после возврата) — подставляем блоки
   const blocksKey = initialBlocks?.map((b) => `${b.id}:${(b.props?.page_id ?? '')}`).join('|') ?? ''
   useEffect(() => {
-    setBlocks((initialBlocks || []).map((b) => ({ ...b, props: b.props ?? {} })))
-  }, [pageId, blocksKey])
+    setBlocks((initialBlocks || []).map(normalizeBlockProps))
+  }, [pageId, blocksKey, normalizeBlockProps])
 
   const handleUpdate = useCallback(async (blockId, patch) => {
     const updated = await updateBlock(blockId, patch)
