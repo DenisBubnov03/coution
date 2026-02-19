@@ -8,7 +8,7 @@ const BLOCK_TYPES = [
   { type: 'heading2', label: 'Заголовок 2' },
   { type: 'heading3', label: 'Заголовок 3' },
   { type: 'callout', label: 'Callout' },
-  { type: 'toggle', label: 'Список с сворачиванием' },
+  { type: 'toggle', label: 'Toggle' },
   { type: 'page', label: 'Страница' },
   { type: 'bulleted_list', label: 'Маркированный список' },
   { type: 'numbered_list', label: 'Нумерованный список' },
@@ -58,6 +58,8 @@ function BlockItem({
   onDragStart,
   onDragOver,
   onDragEnd,
+  openTypeMenuBlockId,
+  onClearOpenTypeMenu,
 }) {
   const [content, setContent] = useState(block.content || '')
   const [showMenu, setShowMenu] = useState(false)
@@ -104,6 +106,13 @@ function BlockItem({
   }, [block.id, block.type, block.content, block.props])
 
   useEffect(() => {
+    if (openTypeMenuBlockId === block.id) {
+      setShowMenu(true)
+      onClearOpenTypeMenu?.()
+    }
+  }, [openTypeMenuBlockId, block.id, onClearOpenTypeMenu])
+
+  useEffect(() => {
     const unchanged = content === (block.content || '') && localType === block.type
       && JSON.stringify(props) === JSON.stringify(block.props || {})
     if (unchanged) return
@@ -123,7 +132,7 @@ function BlockItem({
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      onAddBelow(block.position + 1)
+      onAddBelow(block.position + 1, { openTypeMenu: false })
       return
     }
     if (e.key === 'Backspace' && content === '') {
@@ -181,7 +190,7 @@ function BlockItem({
       className="kb-block-wrap"
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: isToggle ? (block.props?.collapsed === false ? 'flex-start' : 'center') : 'flex-start',
         gap: 4,
         marginBottom: 4,
         minHeight: 32,
@@ -198,8 +207,8 @@ function BlockItem({
         className="kb-block-handle"
         style={{
           flexShrink: 0,
-          width: 44,
-          minHeight: 24,
+          width: 52,
+          minHeight: 28,
           cursor: 'grab',
           color: '#888',
           position: 'relative',
@@ -208,7 +217,7 @@ function BlockItem({
           transition: 'opacity 0.15s',
           display: 'flex',
           alignItems: 'center',
-          gap: 4,
+          gap: 6,
         }}
       >
         <button
@@ -220,10 +229,10 @@ function BlockItem({
             color: '#888',
             cursor: 'pointer',
             padding: 0,
-            fontSize: 18,
+            fontSize: 20,
             lineHeight: 1,
-            width: 20,
-            height: 24,
+            width: 26,
+            height: 28,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -238,7 +247,7 @@ function BlockItem({
           onDragEnd={onDragEnd}
           onClick={(e) => { e.stopPropagation(); setShowHandleMenu((v) => !v) }}
           onMouseDown={(e) => e.stopPropagation()}
-          style={{ userSelect: 'none', fontSize: 18, lineHeight: 1, cursor: 'grab' }}
+          style={{ userSelect: 'none', fontSize: 20, lineHeight: 1, cursor: 'grab', minWidth: 22 }}
           title="Перетащить или нажми для меню"
         >
           ⋮⋮
@@ -622,12 +631,16 @@ function PageBlock({ block, pageId: currentPageId, props, onUpdate, navigate }) 
   )
 }
 
+const TOGGLE_LINE_HEIGHT = 24
+
 function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, handleKeyDown, inputStyle }) {
   const collapsed = props.collapsed !== false
   const lines = (content || '').split('\n')
-  const summary = lines[0] || ''
+  const summaryRaw = lines[0] || ''
+  const summary = summaryRaw.trim()
+  const hasTitle = summary.length > 0
+  const bodyLines = lines.slice(1)
 
-  const lineHeight = 22
   const chevronStyle = {
     color: '#888',
     fontSize: 14,
@@ -635,48 +648,92 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
-    paddingTop: collapsed ? 0 : 6,
-    minHeight: lineHeight,
+    justifyContent: 'center',
+    height: TOGGLE_LINE_HEIGHT,
     cursor: 'pointer',
   }
 
   return (
-    <div style={{ margin: '4px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+    <div style={{ width: '100%', minWidth: 0 }}>
+      {/* Первая строка: только ▼ и заголовок (хендл + и ⋮⋮ у блока слева) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          height: TOGGLE_LINE_HEIGHT,
+          minHeight: TOGGLE_LINE_HEIGHT,
+        }}
+      >
         <span
           style={chevronStyle}
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation()
             const p = { ...props, collapsed: !collapsed }
             setProps(p)
             onUpdate(blockId, p)
           }}
+          onMouseDown={(e) => e.stopPropagation()}
+          title={collapsed ? 'Развернуть' : 'Свернуть'}
         >
           {collapsed ? '▶' : '▼'}
         </span>
-        {collapsed ? (
-          <span
-            style={{ ...inputStyle, flex: 1, lineHeight: `${lineHeight}px`, cursor: 'pointer' }}
-            onClick={() => {
-              const p = { ...props, collapsed: false }
-              setProps(p)
-              onUpdate(blockId, p)
-            }}
-          >
-            {summary || 'Содержимое'}
-          </span>
-        ) : (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Заголовок (первая строка), затем содержимое. / — меню типа блока."
-              rows={Math.max(2, Math.min(20, (content || '').split('\n').length))}
-              style={{ ...inputStyle, width: '100%' }}
-            />
-          </div>
-        )}
+        <input
+          type="text"
+          value={summaryRaw}
+          onChange={(e) => {
+            const rest = lines.slice(1).join('\n')
+            setContent(e.target.value + (rest ? '\n' + rest : ''))
+          }}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="Toggle"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: TOGGLE_LINE_HEIGHT,
+            lineHeight: `${TOGGLE_LINE_HEIGHT}px`,
+            padding: '0 4px',
+            margin: 0,
+            border: 'none',
+            outline: 'none',
+            background: 'transparent',
+            color: hasTitle ? '#e0e0e0' : '#666',
+            fontSize: inputStyle.fontSize ?? 15,
+            fontFamily: inputStyle.fontFamily ?? 'inherit',
+            boxSizing: 'border-box',
+            verticalAlign: 'middle',
+          }}
+        />
       </div>
+
+      {/* Развёрнутое содержимое: только текстовая область */}
+      {!collapsed && (
+        <div style={{ marginTop: 4, paddingLeft: 28 }}>
+          <textarea
+            value={bodyLines.join('\n')}
+            onChange={(e) => setContent((summary ? summary + '\n' : '') + e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Empty toggle. Click or drop blocks inside."
+            rows={Math.max(2, Math.min(20, bodyLines.length || 2))}
+            style={{
+              width: '100%',
+              minHeight: 80,
+              color: '#e0e0e0',
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              fontSize: inputStyle.fontSize ?? 15,
+              fontFamily: inputStyle.fontFamily ?? 'inherit',
+              lineHeight: inputStyle.lineHeight ?? 1.5,
+              margin: 0,
+              padding: '6px 0',
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -710,6 +767,7 @@ const typeMenuStyle = {
 export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksChange }) {
   const [blocks, setBlocks] = useState(initialBlocks || [])
   const [dragState, setDragState] = useState({ draggingId: null, overId: null })
+  const [openTypeMenuBlockId, setOpenTypeMenuBlockId] = useState(null)
 
   // При смене страницы или при новом списке блоков с сервера (в т.ч. после возврата) — подставляем блоки
   const blocksKey = initialBlocks?.map((b) => `${b.id}:${(b.props?.page_id ?? '')}`).join('|') ?? ''
@@ -729,9 +787,10 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
     onBlocksChange?.()
   }, [onBlocksChange])
 
-  const handleAddBelow = useCallback(async (position) => {
+  const handleAddBelow = useCallback(async (position, options = {}) => {
     const newBlock = await createBlock(pageId, { type: 'text', content: '', position })
     setBlocks((prev) => [...prev, newBlock].sort((a, b) => a.position - b.position))
+    if (options.openTypeMenu !== false) setOpenTypeMenuBlockId(newBlock.id)
     onBlocksChange?.()
   }, [pageId, onBlocksChange])
 
@@ -795,7 +854,10 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
     return (
       <EmptyBlock
         pageId={pageId}
-        onCreated={(newBlocks) => setBlocks(Array.isArray(newBlocks) ? newBlocks : [newBlocks])}
+        onCreated={(newBlocks) => {
+          const list = Array.isArray(newBlocks) ? newBlocks : [newBlocks]
+          setBlocks(list)
+        }}
         onBlocksChange={onBlocksChange}
       />
     )
@@ -820,6 +882,8 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          openTypeMenuBlockId={openTypeMenuBlockId}
+          onClearOpenTypeMenu={() => setOpenTypeMenuBlockId(null)}
         />
       ))}
       <div style={{ marginTop: 24 }}>
