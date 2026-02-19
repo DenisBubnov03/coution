@@ -87,7 +87,7 @@ export default function PageView() {
   if (!page) return null
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+    <div style={{ maxWidth: 758, margin: '0 auto', padding: '24px 24px 24px 0' }}>
       {breadcrumbs.length > 0 && (
         <nav
           style={{
@@ -211,7 +211,7 @@ export default function PageView() {
           )}
         </div>
       </header>
-      <section style={{ minHeight: 200 }}>
+      <section style={{ minHeight: 200, paddingLeft: 56 }}>
         <BlockEditor pageId={page.id} blocks={page.blocks ?? []} onBlocksChange={loadPage} />
       </section>
     </div>

@@ -191,10 +191,12 @@ function BlockItem({
     <div
       className="kb-block-wrap"
       style={{
+        width: '100%',
         display: 'flex',
         alignItems: 'flex-start',
         gap: 4,
         marginBottom: 4,
+        marginLeft: -56,
         minHeight: 32,
         opacity: dragState?.draggingId === block.id ? 0.5 : 1,
         outline: dragState?.overId === block.id ? '2px solid #4a9eff' : 'none',
@@ -368,6 +370,8 @@ function BlockItem({
         style={{
           flex: 1,
           minWidth: 0,
+          width: '100%',
+          boxSizing: 'border-box',
           ...(props.bg_color || props.text_color
             ? {
                 background: props.bg_color || 'transparent',
@@ -506,6 +510,8 @@ const CALLOUT_FORM = {
   borderRadius: 8,
   borderLeft: undefined,
   border: undefined,
+  paddingVertical: 12,
+  initialRows: 1,
 }
 
 function CalloutBlock({
@@ -524,12 +530,14 @@ function CalloutBlock({
   return (
     <div
       style={{
+        width: '100%',
+        boxSizing: 'border-box',
         background: bg,
         color: textC,
         borderRadius: form.borderRadius,
         ...(form.borderLeft != null && { borderLeft: form.borderLeft }),
         ...(form.border != null && { border: form.border }),
-        padding: '8px 16px',
+        padding: `${CALLOUT_FORM.paddingVertical}px 16px`,
         margin: '4px 0',
         display: 'flex',
         gap: 12,
@@ -589,7 +597,7 @@ function CalloutBlock({
           onKeyDown={handleKeyDown}
           
 //           placeholder="Цель: ... (Enter — новая строка. - пункт, 1. пункт, [ ] задача)"
-          rows={Math.max(2, Math.min(15, (content || '').split('\n').length))}
+          rows={Math.max(CALLOUT_FORM.initialRows, Math.min(15, (content || '').split('\n').length))}
           style={{
             ...inputStyle,
             color: textC,
@@ -733,6 +741,7 @@ function NestedBlockItem({
   return (
     <div
       style={{
+        width: '100%',
         display: 'flex',
         alignItems: 'flex-start',
         gap: 4,
@@ -1249,7 +1258,7 @@ export default function BlockEditor({ pageId, blocks: initialBlocks, onBlocksCha
   const sorted = [...blocks].sort((a, b) => a.position - b.position)
 
   return (
-    <div className="kb-editor">
+    <div className="kb-editor" style={{ width: '100%' }}>
       {sorted.map((block) => (
         <BlockItem
           key={block.id}
