@@ -8,7 +8,7 @@ const BLOCK_TYPES = [
   { type: 'heading2', label: 'Заголовок 2' },
   { type: 'heading3', label: 'Заголовок 3' },
   { type: 'callout', label: 'Callout' },
-  { type: 'toggle', label: 'Toggle' },
+  { type: 'toggle', label: 'Toggle' }
   { type: 'page', label: 'Страница' },
   { type: 'bulleted_list', label: 'Маркированный список' },
   { type: 'numbered_list', label: 'Нумерованный список' },
