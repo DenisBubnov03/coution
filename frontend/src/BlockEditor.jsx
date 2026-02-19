@@ -190,7 +190,7 @@ function BlockItem({
       className="kb-block-wrap"
       style={{
         display: 'flex',
-        alignItems: isToggle ? (block.props?.collapsed === false ? 'flex-start' : 'center') : 'flex-start',
+        alignItems: 'flex-start',
         gap: 4,
         marginBottom: 4,
         minHeight: 32,
@@ -209,6 +209,7 @@ function BlockItem({
           flexShrink: 0,
           width: 52,
           minHeight: 28,
+          paddingTop: 2,
           cursor: 'grab',
           color: '#888',
           position: 'relative',
@@ -479,6 +480,7 @@ function BlockItem({
             blockId={block.id}
             handleKeyDown={handleKeyDown}
             inputStyle={inputStyle}
+            pageId={pageId}
           />
         ) : (
           <textarea
@@ -488,7 +490,7 @@ function BlockItem({
             onKeyDown={handleKeyDown}
             onFocus={() => { setEditing(true); setBlockFocused(true) }}
             onBlur={() => { setEditing(false); setBlockFocused(false) }}
-            placeholder={blockFocused ? 'напиши или /' : ''}
+            placeholder={blockFocused ? 'Нажми "/" для вызова меню' : ''}
             rows={isCode ? Math.max(5, (content || '').split('\n').length) : Math.max(1, Math.min(15, (content || '').split('\n').length))}
             style={inputStyle}
           />
@@ -632,19 +634,181 @@ function PageBlock({ block, pageId: currentPageId, props, onUpdate, navigate }) 
 }
 
 const TOGGLE_LINE_HEIGHT = 24
+const TOGGLE_CHEVRON_WIDTH = 20
+const TOGGLE_GAP = 8
 
-function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, handleKeyDown, inputStyle }) {
+function NestedBlockItem({ child, inputStyle, onUpdate, onDelete, onAddBelow, handleKeyDown }) {
+  const [content, setContent] = useState(child.content || '')
+  const [localType, setLocalType] = useState(child.type || 'text')
+  const [hovered, setHovered] = useState(false)
+
+  useEffect(() => {
+    setContent(child.content || '')
+    setLocalType(child.type || 'text')
+  }, [child.id, child.content, child.type])
+
+  const persist = useCallback((data) => {
+    onUpdate(child.id, data)
+  }, [child.id, onUpdate])
+
+  useEffect(() => {
+    if (content === (child.content || '')) return
+    const t = setTimeout(() => persist({ content }), 400)
+    return () => clearTimeout(t)
+  }, [content, child.content, persist])
+
+  const onKeyDown = (e) => {
+    if (e.key === '/') return
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      onAddBelow(child.position + 1)
+      return
+    }
+    if (e.key === 'Backspace' && content === '') {
+      e.preventDefault()
+      onDelete(child.id)
+      return
+    }
+    handleKeyDown?.(e)
+  }
+
+  const isHeading = localType.startsWith('heading')
+  const headingLevel = localType === 'heading1' ? 1 : localType === 'heading2' ? 2 : 3
+  const baseInputStyle = {
+    width: '100%',
+    background: 'transparent',
+    border: 'none',
+    outline: 'none',
+    color: '#e0e0e0',
+    fontSize: isHeading ? (4 - headingLevel) * 4 + 12 : 15,
+    fontWeight: isHeading ? 600 : 400,
+    fontFamily: 'inherit',
+    margin: '4px 0',
+    padding: '6px 0',
+    resize: 'none',
+    lineHeight: 1.5,
+    whiteSpace: 'pre-wrap',
+    ...inputStyle,
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 4,
+        marginBottom: 4,
+        minHeight: 32,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        style={{
+          flexShrink: 0,
+          width: 52,
+          minHeight: 28,
+          paddingTop: 2,
+          color: '#888',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 0.15s',
+        }}
+      >
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAddBelow(child.position + 1) }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#888',
+            cursor: 'pointer',
+            padding: 0,
+            fontSize: 20,
+            lineHeight: 1,
+            width: 26,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          title="Добавить блок"
+        >
+          +
+        </button>
+        <span style={{ userSelect: 'none', fontSize: 20, lineHeight: 1, cursor: 'grab', minWidth: 22 }}>⋮⋮</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {localType === 'heading1' || localType === 'heading2' || localType === 'heading3' ? (
+          <input
+            type="text"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={localType === 'heading1' ? 'Заголовок 1' : localType === 'heading2' ? 'Заголовок 2' : 'Заголовок 3'}
+            style={{ ...baseInputStyle, margin: '4px 0', padding: '6px 0' }}
+          />
+        ) : (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Текст или / для типа"
+            rows={Math.max(1, Math.min(15, (content || '').split('\n').length))}
+            style={baseInputStyle}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, handleKeyDown, inputStyle, pageId }) {
   const collapsed = props.collapsed !== false
   const lines = (content || '').split('\n')
   const summaryRaw = lines[0] || ''
   const summary = summaryRaw.trim()
   const hasTitle = summary.length > 0
   const bodyLines = lines.slice(1)
+  const children = (props.children || []).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  const hasMigratedRef = useRef(false)
+  useEffect(() => {
+    if (hasMigratedRef.current || children.length > 0 || bodyLines.length === 0) return
+    hasMigratedRef.current = true
+    const migrated = [{ id: 'n-' + Date.now(), type: 'text', content: bodyLines.join('\n'), position: 0, props: {} }]
+    const newProps = { ...props, children: migrated }
+    setProps(newProps)
+    onUpdate(blockId, { props: newProps })
+  }, [children.length, bodyLines.length, props, setProps, onUpdate, blockId])
+
+  const setChildren = useCallback((newChildren) => {
+    const withPosition = newChildren.map((c, i) => ({ ...c, position: i }))
+    const newProps = { ...props, children: withPosition }
+    setProps(newProps)
+    onUpdate(blockId, { props: newProps })
+  }, [props, setProps, onUpdate, blockId])
+
+  const updateChild = useCallback((childId, data) => {
+    const newChildren = children.map((c) => (c.id === childId ? { ...c, ...data } : c))
+    setChildren(newChildren)
+  }, [children, setChildren])
+
+  const deleteChild = useCallback((childId) => {
+    setChildren(children.filter((c) => c.id !== childId))
+  }, [children, setChildren])
+
+  const addChildBelow = useCallback((index) => {
+    const newChild = { id: 'n-' + Date.now(), type: 'text', content: '', position: index, props: {} }
+    const newChildren = [...children.slice(0, index), newChild, ...children.slice(index)].map((c, i) => ({ ...c, position: i }))
+    setChildren(newChildren)
+  }, [children, setChildren])
 
   const chevronStyle = {
     color: '#888',
     fontSize: 14,
-    width: 20,
+    width: TOGGLE_CHEVRON_WIDTH,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
@@ -655,12 +819,12 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
 
   return (
     <div style={{ width: '100%', minWidth: 0 }}>
-      {/* Первая строка: только ▼ и заголовок (хендл + и ⋮⋮ у блока слева) */}
+      {/* Первая строка: ▼ и заголовок */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: TOGGLE_GAP,
           height: TOGGLE_LINE_HEIGHT,
           minHeight: TOGGLE_LINE_HEIGHT,
         }}
@@ -708,30 +872,57 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
         />
       </div>
 
-      {/* Развёрнутое содержимое: только текстовая область */}
+      {/* Развёрнутое содержимое: вложенные блоки (хендл на уровне ▼ — без отступа) */}
       {!collapsed && (
-        <div style={{ marginTop: 4, paddingLeft: 28 }}>
-          <textarea
-            value={bodyLines.join('\n')}
-            onChange={(e) => setContent((summary ? summary + '\n' : '') + e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Empty toggle. Click or drop blocks inside."
-            rows={Math.max(2, Math.min(20, bodyLines.length || 2))}
-            style={{
-              width: '100%',
-              minHeight: 80,
-              color: '#e0e0e0',
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              fontSize: inputStyle.fontSize ?? 15,
-              fontFamily: inputStyle.fontFamily ?? 'inherit',
-              lineHeight: inputStyle.lineHeight ?? 1.5,
-              margin: 0,
-              padding: '6px 0',
-            }}
-          />
+        <div style={{ marginTop: 4 }}>
+          {children.length === 0 && (
+            <div
+              style={{
+                color: '#666',
+                fontSize: 14,
+                padding: '8px 0',
+                marginBottom: 4,
+              }}
+            >
+              Пусто. Нажми + у блока выше или добавь блок ниже.
+            </div>
+          )}
+          {children.map((child) => (
+            <NestedBlockItem
+              key={child.id}
+              child={child}
+              inputStyle={inputStyle}
+              onUpdate={updateChild}
+              onDelete={deleteChild}
+              onAddBelow={addChildBelow}
+              handleKeyDown={handleKeyDown}
+            />
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, paddingLeft: 0 }}>
+            <button
+              type="button"
+              onClick={() => addChildBelow(children.length)}
+              style={{
+                flexShrink: 0,
+                width: 52,
+                paddingTop: 2,
+                background: 'none',
+                border: 'none',
+                color: '#888',
+                cursor: 'pointer',
+                fontSize: 20,
+                lineHeight: 1,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Добавить блок"
+            >
+              +
+            </button>
+            <span style={{ color: '#666', fontSize: 14 }}>Добавить блок в тоггл</span>
+          </div>
         </div>
       )}
     </div>
