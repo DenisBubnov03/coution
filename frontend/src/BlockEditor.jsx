@@ -209,7 +209,7 @@ function BlockItem({
           flexShrink: 0,
           width: 52,
           minHeight: 28,
-          paddingTop: 2,
+          paddingTop: 7,
           cursor: 'grab',
           color: '#888',
           position: 'relative',
@@ -637,10 +637,24 @@ const TOGGLE_LINE_HEIGHT = 24
 const TOGGLE_CHEVRON_WIDTH = 20
 const TOGGLE_GAP = 8
 
-function NestedBlockItem({ child, inputStyle, onUpdate, onDelete, onAddBelow, handleKeyDown }) {
+function NestedBlockItem({
+  child,
+  inputStyle,
+  onUpdate,
+  onDelete,
+  onAddBelow,
+  onDuplicate,
+  handleKeyDown,
+  dragState,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}) {
   const [content, setContent] = useState(child.content || '')
   const [localType, setLocalType] = useState(child.type || 'text')
   const [hovered, setHovered] = useState(false)
+  const [showHandleMenu, setShowHandleMenu] = useState(false)
 
   useEffect(() => {
     setContent(child.content || '')
@@ -691,6 +705,9 @@ function NestedBlockItem({ child, inputStyle, onUpdate, onDelete, onAddBelow, ha
     ...inputStyle,
   }
 
+  const isDragging = dragState?.draggingId === child.id
+  const isOver = dragState?.overId === child.id
+
   return (
     <div
       style={{
@@ -699,21 +716,27 @@ function NestedBlockItem({ child, inputStyle, onUpdate, onDelete, onAddBelow, ha
         gap: 4,
         marginBottom: 4,
         minHeight: 32,
+        opacity: isDragging ? 0.5 : 1,
+        outline: isOver ? '2px solid #4a9eff' : 'none',
+        borderRadius: 4,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onDragOver={onDragOver ? (e) => onDragOver(e, child) : undefined}
+      onDrop={onDrop ? (e) => onDrop(e, child) : undefined}
     >
       <div
         style={{
           flexShrink: 0,
           width: 52,
           minHeight: 28,
-          paddingTop: 2,
+          paddingTop: 7,
           color: '#888',
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          opacity: hovered ? 1 : 0,
+          opacity: hovered || showHandleMenu ? 1 : 0,
           transition: 'opacity 0.15s',
         }}
       >
@@ -738,9 +761,59 @@ function NestedBlockItem({ child, inputStyle, onUpdate, onDelete, onAddBelow, ha
         >
           +
         </button>
-        <span style={{ userSelect: 'none', fontSize: 20, lineHeight: 1, cursor: 'grab', minWidth: 22 }}>⋮⋮</span>
+        <span
+          draggable
+          onDragStart={(e) => onDragStart(e, child)}
+          onDragEnd={onDragEnd}
+          onClick={(e) => { e.stopPropagation(); setShowHandleMenu((v) => !v) }}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{ userSelect: 'none', fontSize: 20, lineHeight: 1, cursor: 'grab', minWidth: 22 }}
+          title="Перетащить или нажми для меню"
+        >
+          ⋮⋮
+        </span>
+        {showHandleMenu && (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: '100%',
+              marginTop: 4,
+              background: '#252525',
+              border: '1px solid #444',
+              borderRadius: 8,
+              padding: 6,
+              zIndex: 100,
+              minWidth: 180,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>Тип</div>
+            {BLOCK_TYPES.filter((t) => !['page', 'toggle'].includes(t.type)).map((t) => (
+              <button
+                key={t.type}
+                type="button"
+                onClick={() => {
+                  setShowHandleMenu(false)
+                  setLocalType(t.type)
+                  persist({ type: t.type })
+                }}
+                style={{
+                  ...btnStyle,
+                  color: localType === t.type ? '#4a9eff' : '#e0e0e0',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => { setShowHandleMenu(false); onDuplicate(child.id) }} style={btnStyle}>Дублировать</button>
+            <button type="button" onClick={() => { setShowHandleMenu(false); onDelete(child.id) }} style={{ ...btnStyle, color: '#e57373' }}>Удалить</button>
+          </div>
+        )}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }} onMouseEnter={() => setShowHandleMenu(false)}>
         {localType === 'heading1' || localType === 'heading2' || localType === 'heading3' ? (
           <input
             type="text"
@@ -783,6 +856,8 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
     onUpdate(blockId, { props: newProps })
   }, [children.length, bodyLines.length, props, setProps, onUpdate, blockId])
 
+  const [nestedDragState, setNestedDragState] = useState({ draggingId: null, overId: null })
+
   const setChildren = useCallback((newChildren) => {
     const withPosition = newChildren.map((c, i) => ({ ...c, position: i }))
     const newProps = { ...props, children: withPosition }
@@ -804,6 +879,58 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
     const newChildren = [...children.slice(0, index), newChild, ...children.slice(index)].map((c, i) => ({ ...c, position: i }))
     setChildren(newChildren)
   }, [children, setChildren])
+
+  const duplicateChild = useCallback((childId) => {
+    const idx = children.findIndex((c) => c.id === childId)
+    if (idx === -1) return
+    const copy = { ...children[idx], id: 'n-' + Date.now(), position: idx + 1 }
+    const newChildren = [...children.slice(0, idx + 1), copy, ...children.slice(idx + 1)].map((c, i) => ({ ...c, position: i }))
+    setChildren(newChildren)
+  }, [children, setChildren])
+
+  const onNestedDragStart = useCallback((e, child) => {
+    setNestedDragState({ draggingId: child.id, overId: null })
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(child.id))
+  }, [])
+
+  const onNestedDragOver = useCallback((e, overChild) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setNestedDragState((s) => (s.draggingId ? { ...s, overId: overChild.id } : s))
+  }, [])
+
+  const onNestedDragEnd = useCallback(() => {
+    setNestedDragState({ draggingId: null, overId: null })
+  }, [])
+
+  const onNestedDrop = useCallback((e, overChild) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const draggingId = e.dataTransfer.getData('text/plain')
+    if (!draggingId || draggingId === String(overChild.id)) return
+    const fromIndex = children.findIndex((c) => String(c.id) === draggingId)
+    const toIndex = children.findIndex((c) => c.id === overChild.id)
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return
+    const reordered = [...children]
+    const [moved] = reordered.splice(fromIndex, 1)
+    const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
+    reordered.splice(insertIndex, 0, moved)
+    setChildren(reordered.map((c, i) => ({ ...c, position: i })))
+    setNestedDragState({ draggingId: null, overId: null })
+  }, [children, setChildren])
+
+  const ensuredOneRowRef = useRef(false)
+  useEffect(() => {
+    if (collapsed) {
+      ensuredOneRowRef.current = false
+      return
+    }
+    if (children.length > 0) return
+    if (ensuredOneRowRef.current) return
+    ensuredOneRowRef.current = true
+    addChildBelow(0)
+  }, [collapsed, children.length, addChildBelow])
 
   const chevronStyle = {
     color: '#888',
@@ -872,21 +999,9 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
         />
       </div>
 
-      {/* Развёрнутое содержимое: вложенные блоки (хендл на уровне ▼ — без отступа) */}
+      {/* Развёрнутое содержимое: вложенные блоки (хендл на уровне ▼). При развороте создаётся одна строка. */}
       {!collapsed && (
         <div style={{ marginTop: 4 }}>
-          {children.length === 0 && (
-            <div
-              style={{
-                color: '#666',
-                fontSize: 14,
-                padding: '8px 0',
-                marginBottom: 4,
-              }}
-            >
-              Пусто. Нажми + у блока выше или добавь блок ниже.
-            </div>
-          )}
           {children.map((child) => (
             <NestedBlockItem
               key={child.id}
@@ -895,34 +1010,15 @@ function ToggleBlock({ content, setContent, props, setProps, onUpdate, blockId, 
               onUpdate={updateChild}
               onDelete={deleteChild}
               onAddBelow={addChildBelow}
+              onDuplicate={duplicateChild}
               handleKeyDown={handleKeyDown}
+              dragState={nestedDragState}
+              onDragStart={onNestedDragStart}
+              onDragOver={onNestedDragOver}
+              onDrop={onNestedDrop}
+              onDragEnd={onNestedDragEnd}
             />
           ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, paddingLeft: 0 }}>
-            <button
-              type="button"
-              onClick={() => addChildBelow(children.length)}
-              style={{
-                flexShrink: 0,
-                width: 52,
-                paddingTop: 2,
-                background: 'none',
-                border: 'none',
-                color: '#888',
-                cursor: 'pointer',
-                fontSize: 20,
-                lineHeight: 1,
-                height: 28,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Добавить блок"
-            >
-              +
-            </button>
-            <span style={{ color: '#666', fontSize: 14 }}>Добавить блок в тоггл</span>
-          </div>
         </div>
       )}
     </div>
